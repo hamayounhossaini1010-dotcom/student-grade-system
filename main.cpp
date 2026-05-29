@@ -8,14 +8,19 @@
 
 using namespace std;
 
-// PILLAR 4: Transactional Integrity. You use a global constant here to establish a Single Source of Truth for your database file.
+// PILLAR 4: Transactional Integrity. You use a global constant 
 const string FILE_NAME = "student_grades.txt";
+
+// ============= NEW FEATURE: FILE CONSTANTS =============
+const string BACKUP_FILE = "student_grades_backup.txt";
+const string CSV_FILE = "student_grades_export.csv";
+const string USERS_FILE = "users.txt";
 
 /* ================= ENCAPSULATED DATA MODELS (OOP) ================= */
 
-class SubjectScores {
+class SubjectScores {   // computaion 
 private:
-    // PILLAR 1: Encapsulated Structural Design. You apply Data Hiding by using 'private' to protect these variables from external modification.
+    // PILLAR 1: Encapsulated Structural Design.appling Data Hiding by using 'private' to protect these variables from external modification.
     double chinese{0};
     double math{0};
     double english{0};
@@ -29,7 +34,7 @@ public:
     double getEnglish() const { return english; }
     double getComputer() const { return computer; }
 
-    // Data mutator (Setter)
+    // Data mutator (Setter) 
     void setScores(double c, double m, double e, double comp) {
         chinese = c;
         math = m;
@@ -38,13 +43,13 @@ public:
     }
 };
 
-class Student {
+class Student {      // identity 
 private:
     string semester;
     string studentID;
     string className;
     string name;
-    // PILLAR 1: Object Composition. You implement a "Has-A" relationship here. The Student class contains the SubjectScores object, separating identity logic from math logic.
+    // PILLAR 1: Object conposarion. separation of identity from computation, single resposiblity principle 
     SubjectScores scores;
     double totalScore{0};
     double averageScore{0};
@@ -89,6 +94,87 @@ public:
     }
 };
 
+/* ================= NEW FEATURE 1: USER AUTHENTICATION & AUTHORIZATION ================= */
+
+class User {
+private:
+    string username;
+    string password;
+    string role; // "admin" or "teacher"
+
+public:
+    User() = default;
+    User(string u, string p, string r) : username(u), password(p), role(r) {}
+
+    string getUsername() const { return username; }
+    string getPassword() const { return password; }
+    string getRole()     const { return role; }
+};
+
+// Loads user credentials from users.txt; creates default accounts if file missing
+vector<User> loadUsers() {
+    vector<User> users;
+    ifstream in(USERS_FILE);
+    if (!in) {
+        ofstream out(USERS_FILE);
+        out << "admin|admin123|admin\n";
+        out << "teacher|teach123|teacher\n";
+        out.close();
+        users.emplace_back("admin",   "admin123", "admin");
+        users.emplace_back("teacher", "teach123", "teacher");
+        return users;
+    }
+    string line;
+    while (getline(in, line)) {
+        vector<string> parts;
+        size_t pos;
+        while ((pos = line.find('|')) != string::npos) {
+            parts.push_back(line.substr(0, pos));
+            line.erase(0, pos + 1);
+        }
+        parts.push_back(line);
+        if (parts.size() == 3)
+            users.emplace_back(parts[0], parts[1], parts[2]);
+    }
+    in.close();
+    return users;
+}
+
+// Login portal — blocks system entry until valid credentials are provided
+User loginSystem() {
+    vector<User> users = loadUsers();
+    string inputUser, inputPass;
+    int attempts = 3;
+
+    cout << "\n===================================================\n";
+    cout << "         STUDENT GRADE MANAGEMENT SYSTEM           \n";
+    cout << "              USER LOGIN PORTAL                    \n";
+    cout << "===================================================\n";
+
+    while (attempts > 0) {
+        cout << "Username: "; cin >> inputUser;
+        cout << "Password: "; cin >> inputPass;
+
+        for (const auto& u : users) {
+            if (u.getUsername() == inputUser && u.getPassword() == inputPass) {
+                cout << "\nLogin Successful! Welcome, " << u.getUsername()
+                     << " [Role: " << u.getRole() << "]\n";
+                return u;
+            }
+        }
+        attempts--;
+        cout << "Invalid credentials. Attempts remaining: " << attempts << "\n";
+    }
+
+    cout << "Too many failed attempts. Access denied.\n";
+    return User("", "", "");
+}
+
+// Authorization check — restricts Admin-only features
+bool isAdmin(const User& user) {
+    return user.getRole() == "admin";
+}
+
 /* ================= INPUT VALIDATION UTILITIES ================= */
 
 // Flushes remaining invalid characters from the input stream buffer
@@ -102,7 +188,8 @@ double inputScore(const string& subject) {
     while (true) {
         cout << "   Enter " << subject << " Score (0-100): ";
         cin >> score;
-        // PILLAR 2: Defensive Runtime Engineering. You built a Validation Gate here. If a user inputs text instead of numbers, you catch the fail state and clear the buffer to prevent a crash.
+
+        // PILLAR 2: Defensive Runtime Engineering. built a Validation Gate here. If a user inputs text instead of numbers, you catch the fail state and clear the buffer to prevent a crash.
         if (cin.fail()) {
             cin.clear();
             clearInputBuffer();
@@ -116,7 +203,7 @@ double inputScore(const string& subject) {
 
 /* ================= HELPER METHODS (MODULAR DESIGN) ================= */
 
-// PILLAR 3: Algorithmic Efficiency. You decoupled your sorting logic into these modular predicates. This ensures your STL sorts execute efficiently as the class size grows.
+// PILLAR 3: Algorithmic Efficiency. optimize data processing using STL vector container 
 bool compareByAverageDescending(const Student& a, const Student& b) {
     return a.getAverageScore() > b.getAverageScore();
 }
@@ -144,7 +231,7 @@ void printSingleReportCard(const Student& s) {
 void printFailingRow(const Student& s) {
     string failedList = "";
     if (s.getScores().getChinese() < 60) failedList += "Chi ";
-    if (s.getScores().getMath() < 60) failedList += "Math ";
+    if (s.getScores().getMath() < 60)    failedList += "Math ";
     if (s.getScores().getEnglish() < 60) failedList += "Eng ";
     if (s.getScores().getComputer() < 60) failedList += "Com ";
 
@@ -303,7 +390,7 @@ void generateClassReport(const vector<Student>& students) {
 /* ================= SECURE DATA PERSISTENCE ================= */
 
 void saveToFile(const vector<Student>& students) {
-    // PILLAR 4: Transactional Integrity. You explicitly acquire the file handle here to manage the data lifecycle safely.
+    // PILLAR 4: Transactional Integrity. I/O streams / Data persistece 
     ofstream out(FILE_NAME);
     if (!out) return;
     for (const auto& s : students) {
@@ -340,30 +427,105 @@ void loadFromFile(vector<Student>& students) {
     in.close();
 }
 
+/* ================= NEW FEATURE 2: EXPORT TO CSV ================= */
+
+void exportToCSV(const vector<Student>& students) {
+    if (students.empty()) {
+        cout << "\n No data available to export.\n";
+        return;
+    }
+    ofstream csv(CSV_FILE);
+    if (!csv) {
+        cout << "Failed to create CSV export file.\n";
+        return;
+    }
+    // Write CSV header row
+    csv << "Semester,Student ID,Class,Name,Chinese,Math,English,Computer,Total,Average\n";
+    for (const auto& s : students) {
+        csv << s.getSemester()               << ","
+            << s.getStudentID()              << ","
+            << s.getClassName()              << ","
+            << s.getName()                   << ","
+            << s.getScores().getChinese()    << ","
+            << s.getScores().getMath()       << ","
+            << s.getScores().getEnglish()    << ","
+            << s.getScores().getComputer()   << ","
+            << s.getTotalScore()             << ","
+            << fixed << setprecision(2) << s.getAverageScore() << "\n";
+    }
+    csv.close();
+    cout << "Data successfully exported to: " << CSV_FILE << "\n";
+}
+
+/* ================= NEW FEATURE 3 & 4: BACKUP & RESTORE ================= */
+
+void backupData(const vector<Student>& students) {
+    ifstream src(FILE_NAME, ios::binary);
+    if (!src) {
+        cout << " No source data file found to backup.\n";
+        return;
+    }
+    ofstream dst(BACKUP_FILE, ios::binary);
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
+    cout << "Backup created successfully: " << BACKUP_FILE << "\n";
+}
+
+void restoreData(vector<Student>& students) {
+    ifstream backup(BACKUP_FILE);
+    if (!backup) {
+        cout << " No backup file found. Please create a backup first.\n";
+        return;
+    }
+    ofstream main(FILE_NAME, ios::binary);
+    main << backup.rdbuf();
+    backup.close();
+    main.close();
+
+    // Reload students from the restored file into active memory vector
+    loadFromFile(students);
+    cout << "Data successfully restored from backup file.\n";
+}
+
 // Display interface helper to keep main() loop tight and compliant
-void displayMainMenu() {
+// Updated to show new menu options and display logged-in user
+void displayMainMenu(const User& currentUser) {
     cout << "\n===================================================\n";
     cout << "        STUDENT GRADE MANAGEMENT CORE SYSTEM         \n";
+    cout << "  Logged in as: " << currentUser.getUsername()
+         << " [" << currentUser.getRole() << "]\n";
     cout << "===================================================\n";
     cout << "  1. Grade Entry and Modification\n";
     cout << "  2. Grade Statistics by Class\n";
     cout << "  3. Grade Query Portal\n";
     cout << "  4. Grade Report Generation\n";
     cout << "  5. Explicit Save Matrix\n";
+    cout << "  6. Export Grades to CSV\n";
+    cout << "  7. Backup Data              [Admin Only]\n";
+    cout << "  8. Restore Data from Backup [Admin Only]\n";
     cout << "  0. Secure Exit and Commit Saves\n";
     cout << "===================================================\n";
-    cout << "Select Option ID (0-5): ";
+    cout << "Select Option ID (0-8): ";
 }
 
 /* ================= CENTRAL APPLICATION RUNTIME INTERFACE ================= */
 
 int main() {
+
+    // NEW: Login portal executes first — blocks all access until authenticated
+    User currentUser = loginSystem();
+    if (currentUser.getUsername().empty()) {
+        cout << "System access terminated.\n";
+        return 1;
+    }
+
     vector<Student> systemDatabase;
     loadFromFile(systemDatabase);
 
     int menuDirective;
     do {
-        displayMainMenu();
+        displayMainMenu(currentUser);
         if (!(cin >> menuDirective)) {
             cin.clear();
             clearInputBuffer();
@@ -372,19 +534,40 @@ int main() {
         }
 
         switch (menuDirective) {
-            case 1: addOrUpdateGrade(systemDatabase); break;
+            case 1: addOrUpdateGrade(systemDatabase);    break;
             case 2: showClassStatistics(systemDatabase); break;
-            case 3: queryGradeSystem(systemDatabase); break;
+            case 3: queryGradeSystem(systemDatabase);    break;
             case 4: generateClassReport(systemDatabase); break;
-            case 5: 
-                saveToFile(systemDatabase); 
-                cout << "Local database cache written to flat-file successfully." << endl; 
+            case 5:
+                saveToFile(systemDatabase);
+                cout << "Local database cache written to flat-file successfully." << endl;
                 break;
-            case 0: 
-                saveToFile(systemDatabase); 
-                cout << "Data records safely saved. Shutting down system. Goodbye!" << endl; 
+            // NEW FEATURE: Export to CSV
+            case 6:
+                exportToCSV(systemDatabase);
                 break;
-            default: cout << "Selection code outside operational boundaries." << endl;
+            // NEW FEATURE: Backup Data (Admin Only)
+            case 7:
+                if (isAdmin(currentUser)) {
+                    backupData(systemDatabase);
+                } else {
+                    cout << "Access Denied. This feature is restricted to Admins only.\n";
+                }
+                break;
+            // NEW FEATURE: Restore Data (Admin Only)
+            case 8:
+                if (isAdmin(currentUser)) {
+                    restoreData(systemDatabase);
+                } else {
+                    cout << "Access Denied. This feature is restricted to Admins only.\n";
+                }
+                break;
+            case 0:
+                saveToFile(systemDatabase);
+                cout << "Data records safely saved. Shutting down system. Goodbye!" << endl;
+                break;
+            default:
+                cout << "Selection code outside operational boundaries." << endl;
         }
     } while (menuDirective != 0);
 
